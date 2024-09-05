@@ -1,0 +1,24 @@
+services:  
+  ipg-zarinpal:
+    build: app
+    restart: unless-stopped
+    # command: python app.py
+    expose:
+      - 8000
+    ports:
+      - 3021:3000
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app
+    networks:
+      - ufaas-net
+      - mongo-net
+      
+networks:
+  traefik-net:
+    external: true
+  ufaas-net:
+    external: true
+  mongo-net:
+    external: true
