@@ -37,7 +37,7 @@ app = fastapi.FastAPI(
         "name": "MIT License",
         "url": "https://github.com/mahdikiani/FastAPILaunchpad/blob/main/LICENSE",
     },
-    openapi_url="/v1/apps/zarinpal/openapi.json",
+    openapi_url=f"/{config.Settings.base_path}/openapi.json",
     lifespan=lifespan,
 )
 
@@ -105,11 +105,13 @@ app.add_middleware(
 from apps.business.routes import router as business_router
 from apps.zarinpal.routes import router as zarinpal_router
 
-app.include_router(business_router, prefix="/api/v1/apps/business")
-app.include_router(zarinpal_router, prefix="/api/v1/apps/zarinpal")
+app.include_router(
+    business_router, prefix=f"/{config.Settings.base_path}", include_in_schema=False
+)
+app.include_router(zarinpal_router, prefix=f"/{config.Settings.base_path}")
 
 
-@app.get("/health")
+@app.get(f"/{config.Settings.base_path}/health")
 async def health():
     return {"status": "UP"}
 
@@ -119,6 +121,6 @@ async def openapi():
     openapi = app.openapi()
     paths = {}
     for path in openapi["paths"]:
-        paths[f"/v1/apps/zarinpal{path}"] = openapi["paths"][path]
+        paths[f"/{config.Settings.base_path}{path}"] = openapi["paths"][path]
     openapi["paths"] = paths
     return openapi
