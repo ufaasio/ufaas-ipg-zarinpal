@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from apps.business.routes import AbstractAuthRouter
 from fastapi import Request
@@ -33,6 +34,12 @@ class ZarinpalRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
             status_code=201,
         )
         self.router.add_api_route(
+            "/start",
+            self.start_direct_purchase,
+            methods=["GET"],
+            # response_model=self.retrieve_response_schema,
+        )
+        self.router.add_api_route(
             "/{uid:uuid}/start",
             self.start_purchase,
             methods=["GET"],
@@ -47,6 +54,15 @@ class ZarinpalRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
 
     async def create_item(self, request: Request, item: PurchaseCreateSchema):
         return await super().create_item(request, item.model_dump())
+
+    async def start_direct_purchase(
+        self, request: Request, amount: Decimal, description: str, test: bool = False
+    ):
+        purchase: Purchase = await self.create_item(
+            request,
+            PurchaseCreateSchema(amount=amount, description=description, is_test=test),
+        )
+        return await self.start_purchase(request, purchase.uid)
 
     async def start_purchase(self, request: Request, uid: uuid.UUID):
         auth = await self.get_auth(request)

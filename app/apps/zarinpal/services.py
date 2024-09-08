@@ -7,9 +7,7 @@ from .models import Purchase
 
 
 async def start_purchase(business: Business, purchase: Purchase) -> dict:
-    callback_url = (
-        f"{business.domain}/{Settings.base_path}/purchases/{purchase.uid}/verify"
-    )
+    callback_url = f"https://{business.domain}/{Settings.base_path}/purchases/{purchase.uid}/verify"
     data = {
         "MerchantID": business.secret.merchant_id,
         "Amount": int(purchase.amount),
