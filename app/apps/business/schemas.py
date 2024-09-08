@@ -1,11 +1,14 @@
 import json
 from typing import Any
 
-from pydantic import BaseModel, model_validator
-
 from apps.base.auth_middlewares import JWTSecret
 from apps.base.schemas import OwnedEntitySchema
+from pydantic import BaseModel, model_validator
 from server.config import Settings
+
+
+class ZarinpalSecret(BaseModel):
+    merchant_id: str
 
 
 class Config(BaseModel):
@@ -25,6 +28,8 @@ class BusinessSchema(OwnedEntitySchema):
 
 
 class BusinessDataCreateSchema(BaseModel):
+    secret: ZarinpalSecret
+
     name: str
     domain: str | None = None
 
@@ -32,8 +37,9 @@ class BusinessDataCreateSchema(BaseModel):
     description: str | None = None
     config: Config = Config()
 
+    @classmethod
     @model_validator(mode="before")
-    def validate_domain(data: dict):
+    def validate_domain(cls, data: dict):
         if not data.get("domain"):
             business_name_domain = f"{data.get('name')}.{Settings.root_url}"
             data["domain"] = business_name_domain
@@ -47,3 +53,4 @@ class BusinessDataUpdateSchema(BaseModel):
     meta_data: dict[str, Any] | None = None
     description: str | None = None
     config: Config | None = None
+    secret: ZarinpalSecret | None = None

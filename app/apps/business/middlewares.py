@@ -1,12 +1,12 @@
 import uuid
 from typing import Literal
 
+from apps.base.auth_middlewares import UserData, Usso
+from core.exceptions import BaseHTTPException
 from fastapi import Request
 from pydantic import BaseModel
 
-from apps.base.auth_middlewares import UserData, Usso
-from apps.business.models import Business
-from core.exceptions import BaseHTTPException
+from .models import Business
 
 
 class AuthorizationData(BaseModel):

@@ -4,13 +4,11 @@ from contextlib import asynccontextmanager
 
 import fastapi
 import pydantic
+from core import exceptions
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from json_advanced import dumps
 from usso.exceptions import USSOException
-
-from core import exceptions
 
 from . import config, db
 
@@ -104,6 +102,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from apps.business.routes import router as business_router
+from apps.zarinpal.routes import router as zarinpal_router
+
+app.include_router(business_router, prefix="/api/v1/apps/business")
+app.include_router(zarinpal_router, prefix="/api/v1/apps/zarinpal")
 
 
 @app.get("/health")

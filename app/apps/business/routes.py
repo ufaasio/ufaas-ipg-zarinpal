@@ -1,22 +1,17 @@
 import uuid
 from typing import TypeVar
 
-from fastapi import Depends, Request
-from usso.fastapi import jwt_access_security
-
 from apps.base.handlers import create_dto
-from apps.base.schemas import BusinessEntitySchema, PaginatedResponse
 from apps.base.models import BusinessEntity
 from apps.base.routes import AbstractBaseRouter
-from .schemas import (
-    BusinessDataCreateSchema,
-    BusinessDataUpdateSchema,
-    BusinessSchema,
-)
+from apps.base.schemas import BusinessEntitySchema, PaginatedResponse
+from fastapi import Depends, Query, Request
 from server.config import Settings
+from usso.fastapi import jwt_access_security
 
-from .middlewares import get_business
+from .middlewares import AuthorizationData, authorization_middleware, get_business
 from .models import Business
+from .schemas import BusinessDataCreateSchema, BusinessDataUpdateSchema, BusinessSchema
 
 T = TypeVar("T", bound=BusinessEntity)
 TS = TypeVar("TS", bound=BusinessEntitySchema)
@@ -30,11 +25,11 @@ class AbstractBusinessBaseRouter(AbstractBaseRouter[T, TS]):
         limit: int = 10,
         business: Business = Depends(get_business),
     ):
-        user = await self.get_user(request)
+        user_id = await self.get_user_id(request)
         limit = max(1, min(limit, Settings.page_max_limit))
 
         items, total = await self.model.list_total_combined(
-            user_id=user.uid if user else None,
+            user_id=user_id,
             business_name=business.name,
             offset=offset,
             limit=limit,
@@ -54,8 +49,7 @@ class AbstractBusinessBaseRouter(AbstractBaseRouter[T, TS]):
         uid,
         business: Business = Depends(get_business),
     ):
-        user = await self.get_user(request)
-        user_id = user.uid if user else None
+        user_id = await self.get_user_id(request)
         item = await self.get_item(uid, user_id=user_id, business_name=business.name)
         return item
 
@@ -64,9 +58,9 @@ class AbstractBusinessBaseRouter(AbstractBaseRouter[T, TS]):
         request: Request,
         business: Business = Depends(get_business),
     ):
-        user = await self.get_user(request)
+        user_id = await self.get_user_id(request)
         item_data: TS = await create_dto(self.create_response_schema)(
-            request, user_id=user.uid if user else None, business_name=business.name
+            request, user_id=user_id, business_name=business.name
         )
         item = await self.model.create_item(item_data.model_dump())
 
@@ -80,8 +74,7 @@ class AbstractBusinessBaseRouter(AbstractBaseRouter[T, TS]):
         data: dict,
         business: Business = Depends(get_business),
     ):
-        user = await self.get_user(request)
-        user_id = user.uid if user else None
+        user_id = await self.get_user_id(request)
         item = await self.get_item(uid, user_id=user_id, business_name=business.name)
         # item = await update_dto(self.model)(request, user)
         item = await self.model.update_item(item, data)
@@ -93,9 +86,67 @@ class AbstractBusinessBaseRouter(AbstractBaseRouter[T, TS]):
         uid,
         business: Business = Depends(get_business),
     ):
-        user = await self.get_user(request)
-        user_id = user.uid if user else None
+        user_id = await self.get_user_id(request)
         item = await self.get_item(uid, user_id=user_id, business_name=business.name)
+        item = await self.model.delete_item(item)
+        return item
+
+
+class AbstractAuthRouter(AbstractBusinessBaseRouter[T, TS]):
+    async def get_auth(self, request: Request) -> AuthorizationData:
+        return await authorization_middleware(request)
+
+    async def list_items(
+        self,
+        request: Request,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(10, ge=0, le=Settings.page_max_limit),
+    ):
+        auth = await self.get_auth(request)
+        items, total = await self.model.list_total_combined(
+            user_id=auth.user_id,
+            business_name=auth.business.name,
+            offset=offset,
+            limit=limit,
+        )
+
+        items_in_schema = [self.list_item_schema(**item.model_dump()) for item in items]
+
+        return PaginatedResponse(
+            items=items_in_schema, offset=offset, limit=limit, total=total
+        )
+
+    async def retrieve_item(self, request: Request, uid: uuid.UUID):
+        auth = await self.get_auth(request)
+        item = await self.get_item(
+            uid, user_id=auth.user_id, business_name=auth.business.name
+        )
+        return item
+
+    async def create_item(self, request: Request, data: dict):
+        auth = await self.get_auth(request)
+        item = self.model(
+            business_name=auth.business.name,
+            user_id=auth.user_id if auth.user_id else auth.user.uid,
+            **data,
+        )
+        await item.save()
+        return self.create_response_schema(**item.model_dump())
+
+    async def update_item(self, request: Request, uid: uuid.UUID, data: dict):
+        auth = await self.get_auth(request)
+        item = await self.get_item(
+            uid, user_id=auth.user_id, business_name=auth.business.name
+        )
+
+        item = await self.model.update_item(item, data)
+        return item
+
+    async def delete_item(self, request: Request, uid: uuid.UUID):
+        auth = await self.get_auth(request)
+        item = await self.get_item(
+            uid, user_id=auth.user_id, business_name=auth.business.name
+        )
         item = await self.model.delete_item(item)
         return item
 

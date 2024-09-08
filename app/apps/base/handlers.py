@@ -37,4 +37,3 @@ def create_dto(cls: OT):
         return cls(**form_data)
 
     return dto
-
