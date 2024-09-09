@@ -24,6 +24,7 @@ services:
       - "traefik.http.routers.${PROJECT_NAME}-secure.tls=true"
       - "traefik.http.routers.${PROJECT_NAME}-secure.tls.certresolver=letsencrypt"
       - "traefik.http.services.${PROJECT_NAME}.loadbalancer.server.port=8000"
+      - "traefik.http.services.${PROJECT_NAME}.loadbalancer.passHostHeader=true"
       - "traefik.docker.network=traefik-net"
 
       
