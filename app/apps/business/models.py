@@ -35,7 +35,6 @@ class Business(OwnedEntity):
     async def get_by_name(cls, name: str):
         return await cls.find_one(cls.name == name)
 
-    @classmethod
     @model_validator(mode="before")
     def validate_domain(cls, data: dict):
         if not data.get("domain"):

@@ -12,6 +12,7 @@ from .config import ZarinpalConfig
 class Purchase(BusinessOwnedEntity):
     amount: Decimal
     description: str
+    callback_url: str
 
     phone: str | None = None
 

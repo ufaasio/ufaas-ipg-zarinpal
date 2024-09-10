@@ -10,7 +10,7 @@ from .schemas import PurchaseCreateSchema, PurchaseSchema
 from .services import start_purchase, verify_purchase
 
 
-class ZarinpalRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
+class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
     def __init__(self):
         super().__init__(model=Purchase, schema=PurchaseSchema, user_dependency=None)
 
@@ -49,18 +49,28 @@ class ZarinpalRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
             "/{uid:uuid}/verify",
             self.verify_purchase,
             methods=["GET"],
-            response_model=self.retrieve_response_schema,
+            # response_model=self.retrieve_response_schema,
         )
 
     async def create_item(self, request: Request, item: PurchaseCreateSchema):
         return await super().create_item(request, item.model_dump())
 
     async def start_direct_purchase(
-        self, request: Request, amount: Decimal, description: str, test: bool = False
+        self,
+        request: Request,
+        amount: Decimal,
+        description: str,
+        callback_url: str,
+        test: bool = False,
     ):
         purchase: Purchase = await self.create_item(
             request,
-            PurchaseCreateSchema(amount=amount, description=description, is_test=test),
+            PurchaseCreateSchema(
+                amount=amount,
+                description=description,
+                callback_url=callback_url,
+                is_test=test,
+            ),
         )
         return await self.start_purchase(request, purchase.uid)
 
@@ -80,9 +90,13 @@ class ZarinpalRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
         item = await self.get_item(
             uid, user_id=auth.user_id, business_name=auth.business.name
         )
-        return await verify_purchase(
+        purchase = await verify_purchase(
             business=auth.business, item=item, status=Status, authority=Authority
         )
 
+        # TODO send transaction proposal to the business ufaas
 
-router = ZarinpalRouter().router
+        return RedirectResponse(url=purchase.callback_url)
+
+
+router = PurchaseRouter().router
