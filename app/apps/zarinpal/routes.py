@@ -1,13 +1,16 @@
+import logging
 import uuid
 from decimal import Decimal
 
+from apps.base.auth_middlewares import Usso
+from apps.business.middlewares import get_business
 from apps.business.routes import AbstractAuthRouter
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from .models import Purchase
 from .schemas import PurchaseCreateSchema, PurchaseSchema
-from .services import start_purchase, verify_purchase
+from .services import create_proposal, start_purchase, verify_purchase
 
 
 class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
@@ -53,11 +56,33 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
         )
 
     async def create_item(self, request: Request, item: PurchaseCreateSchema):
-        return await super().create_item(request, item.model_dump())
+
+        business = await get_business(request)
+
+        try:
+            user = await Usso(
+                jwt_config=business.config.jwt_config
+            ).jwt_access_security(request)
+        except Exception as e:
+            user = None
+            logging.warning(f"create item not user: {e}")
+
+        user_id = user.user_id if user else business.user_id
+
+        item = self.model(
+            business_name=business.name,
+            user_id=user_id,
+            **item.model_dump(),
+        )
+        await item.save()
+        return self.create_response_schema(**item.model_dump())
+
+        # return await super().create_item(request, item.model_dump())
 
     async def start_direct_purchase(
         self,
         request: Request,
+        wallet_id: uuid.UUID,
         amount: Decimal,
         description: str,
         callback_url: str,
@@ -66,37 +91,49 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
         purchase: Purchase = await self.create_item(
             request,
             PurchaseCreateSchema(
+                wallet_id=wallet_id,
                 amount=amount,
                 description=description,
                 callback_url=callback_url,
                 is_test=test,
             ),
         )
+        logging.info(
+            f"start_direct_purchase: {wallet_id=}, {amount=}, {description=}, {callback_url=}, {test=}"
+        )
         return await self.start_purchase(request, purchase.uid)
 
     async def start_purchase(self, request: Request, uid: uuid.UUID):
-        auth = await self.get_auth(request)
-        item: Purchase = await self.get_item(
-            uid, user_id=auth.user_id, business_name=auth.business.name
-        )
-        start_data = await start_purchase(business=auth.business, purchase=item)
+        business = await get_business(request)
+
+        item: Purchase = await self.get_item(uid, business_name=business.name)
+        start_data = await start_purchase(business=business, purchase=item)
         if start_data["status"]:
             return RedirectResponse(url=item.start_payment_url)
 
     async def verify_purchase(
         self, request: Request, uid: uuid.UUID, Status: str, Authority: str
     ):
-        auth = await self.get_auth(request)
-        item = await self.get_item(
-            uid, user_id=auth.user_id, business_name=auth.business.name
-        )
-        purchase = await verify_purchase(
-            business=auth.business, item=item, status=Status, authority=Authority
-        )
+        try:
+            business = await get_business(request)
 
-        # TODO send transaction proposal to the business ufaas
+            item: Purchase = await self.get_item(uid, business_name=business.name)
+            if item.status != "PENDING":
+                return RedirectResponse(url=item.callback_url)
 
-        return RedirectResponse(url=purchase.callback_url)
+            purchase = await verify_purchase(
+                business=business, item=item, status=Status, authority=Authority
+            )
+
+            if purchase.status == "FAILED":
+                return RedirectResponse(url=purchase.callback_url)
+
+            await create_proposal(purchase, business)
+
+            return RedirectResponse(url=purchase.callback_url)
+        except Exception as e:
+            logging.error(f"verify error: {e}")
+            raise e
 
 
 router = PurchaseRouter().router

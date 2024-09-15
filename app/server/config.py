@@ -22,9 +22,13 @@ class Settings(metaclass=Singleton):
     base_dir: Path = Path(__file__).resolve().parent.parent
     base_path: str = "/api/v1/apps/zarinpal"
     page_max_limit: int = 100
+    currency: str = "IRR"
 
-    JWT_SECRET: str = os.getenv(
-        "USSO_JWT_SECRET",
+    app_id: str = os.getenv("APP_ID")
+    app_secret: str = os.getenv("APP_SECRET")
+
+    JWT_CONFIG: str = os.getenv(
+        "USSO_JWT_CONFIG",
         default='{"jwk_url": "https://usso.io/website/jwks.json","type": "RS256","header": {"type": "Cookie", "name": "usso_access_token"} }',
     )
 

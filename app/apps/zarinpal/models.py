@@ -1,15 +1,17 @@
+import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
 
 from apps.base.models import BusinessOwnedEntity
-from pydantic import field_validator
+from pydantic import field_serializer, field_validator
 from utils import numtools
 
 from .config import ZarinpalConfig
+from .schemas import PurchaseStatus
 
 
 class Purchase(BusinessOwnedEntity):
+    wallet_id: uuid.UUID
     amount: Decimal
     description: str
     callback_url: str
@@ -17,7 +19,7 @@ class Purchase(BusinessOwnedEntity):
     phone: str | None = None
 
     is_test: bool = False
-    status: Literal["INIT", "PENDING", "FAILED", "SUCCESS"] = "INIT"
+    status: PurchaseStatus = PurchaseStatus.INIT
 
     authority: str | None = None
 
@@ -28,6 +30,14 @@ class Purchase(BusinessOwnedEntity):
     @field_validator("amount", mode="before")
     def validate_amount(cls, value):
         return numtools.decimal_amount(value)
+
+    @field_serializer("status")
+    def serialize_status(self, value):
+        if isinstance(value, PurchaseStatus):
+            return value.value
+        if isinstance(value, str):
+            return value
+        return str(value)
 
     @classmethod
     async def get_purchase_by_authority(cls, business_name: str, authority: str):

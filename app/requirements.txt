@@ -14,3 +14,4 @@ aiocache
 usso
 
 beanie
+fastapi-mongo-base
