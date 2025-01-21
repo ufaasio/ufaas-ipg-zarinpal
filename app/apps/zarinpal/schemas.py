@@ -4,9 +4,9 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Literal
 
-from apps.base.schemas import BusinessOwnedEntitySchema
+from fastapi_mongo_base.schemas import BusinessEntitySchema
+from fastapi_mongo_base.utils import bsontools, texttools
 from pydantic import BaseModel, field_serializer, field_validator
-from utils import numtools, texttools
 
 
 class PurchaseStatus(str, Enum):
@@ -17,12 +17,13 @@ class PurchaseStatus(str, Enum):
     REFUNDED = "REFUNDED"
 
 
-class PurchaseSchema(BusinessOwnedEntitySchema):
+class PurchaseSchema(BusinessEntitySchema):
+    user_id: uuid.UUID | None
     wallet_id: uuid.UUID
     amount: Decimal
 
     phone: str | None = None
-    description: str | None = None
+    description: str  # | None = None
 
     is_test: bool = False
     status: PurchaseStatus = PurchaseStatus.INIT
@@ -37,10 +38,9 @@ class PurchaseSchema(BusinessOwnedEntitySchema):
     def serialize_status(self, value: PurchaseStatus):
         return value.value
 
-    @classmethod
     @field_validator("amount", mode="before")
     def validate_amount(cls, value):
-        return numtools.decimal_amount(value)
+        return bsontools.decimal_amount(value)
 
 
 class PurchaseCreateSchema(BaseModel):
@@ -53,7 +53,7 @@ class PurchaseCreateSchema(BaseModel):
 
     @field_validator("amount", mode="before")
     def validate_amount(cls, value):
-        return numtools.decimal_amount(value)
+        return bsontools.decimal_amount(value)
 
     @field_validator("callback_url", mode="before")
     def validate_callback_url(cls, value):

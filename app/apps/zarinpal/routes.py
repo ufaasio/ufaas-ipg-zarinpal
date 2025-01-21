@@ -2,14 +2,14 @@ import logging
 import uuid
 from decimal import Decimal
 
-from apps.base.auth_middlewares import Usso
-from apps.business.middlewares import get_business
-from apps.business.routes import AbstractAuthRouter
 from fastapi import Request
 from fastapi.responses import RedirectResponse
+from ufaas_fastapi_business.middlewares import get_business
+from ufaas_fastapi_business.routes import AbstractAuthRouter
+from usso import Usso
 
 from .models import Purchase
-from .schemas import PurchaseCreateSchema, PurchaseSchema
+from .schemas import PurchaseCreateSchema, PurchaseSchema, PurchaseStatus
 from .services import create_proposal, start_purchase, verify_purchase
 
 
@@ -22,6 +22,13 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
         self.create_request_schema = PurchaseCreateSchema
 
     def config_routes(self):
+        self.router.add_api_route(
+            "/",
+            self.list_items,
+            methods=["GET"],
+            response_model=self.list_response_schema,
+            status_code=200,
+        )
         self.router.add_api_route(
             "/{uid:uuid}",
             self.retrieve_item,
@@ -55,6 +62,9 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
             # response_model=self.retrieve_response_schema,
         )
 
+    async def retrieve_item(self, request: Request, uid: uuid.UUID):
+        return await super().retrieve_item(request, uid)
+
     async def create_item(self, request: Request, item: PurchaseCreateSchema):
 
         business = await get_business(request)
@@ -67,7 +77,7 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
             user = None
             logging.warning(f"create item not user: {e}")
 
-        user_id = user.user_id if user else business.user_id
+        user_id = user.uid if user else business.user_id
 
         item = self.model(
             business_name=business.name,
@@ -118,19 +128,19 @@ class PurchaseRouter(AbstractAuthRouter[Purchase, PurchaseSchema]):
             business = await get_business(request)
 
             item: Purchase = await self.get_item(uid, business_name=business.name)
-            if item.status != "PENDING":
+            if item.status != PurchaseStatus.PENDING:
                 return RedirectResponse(url=item.callback_url)
 
             purchase = await verify_purchase(
                 business=business, item=item, status=Status, authority=Authority
             )
 
-            if purchase.status == "FAILED":
-                return RedirectResponse(url=purchase.callback_url)
+            if purchase.status == PurchaseStatus.SUCCESS:
+                await create_proposal(purchase, business)
 
-            await create_proposal(purchase, business)
-
-            return RedirectResponse(url=purchase.callback_url)
+            return RedirectResponse(
+                url=f"{purchase.callback_url}?success={purchase.is_successful}"
+            )
         except Exception as e:
             logging.error(f"verify error: {e}")
             raise e

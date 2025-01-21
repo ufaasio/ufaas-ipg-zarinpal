@@ -1,43 +1,16 @@
-import uuid
 from datetime import datetime
-from decimal import Decimal
 
-from apps.base.models import BusinessOwnedEntity
-from pydantic import field_serializer, field_validator
-from utils import numtools
+from fastapi_mongo_base.models import BusinessEntity
 
 from .config import ZarinpalConfig
-from .schemas import PurchaseStatus
+from .schemas import PurchaseSchema
 
 
-class Purchase(BusinessOwnedEntity):
-    wallet_id: uuid.UUID
-    amount: Decimal
-    description: str
+class Purchase(PurchaseSchema, BusinessEntity):
     callback_url: str
 
-    phone: str | None = None
-
-    is_test: bool = False
-    status: PurchaseStatus = PurchaseStatus.INIT
-
-    authority: str | None = None
-
-    failure_reason: str | None = None
-    verified_at: datetime | None = None
-    ref_id: int | None = None
-
-    @field_validator("amount", mode="before")
-    def validate_amount(cls, value):
-        return numtools.decimal_amount(value)
-
-    @field_serializer("status")
-    def serialize_status(self, value):
-        if isinstance(value, PurchaseStatus):
-            return value.value
-        if isinstance(value, str):
-            return value
-        return str(value)
+    class Settings:
+        indexes = BusinessEntity.Settings.indexes
 
     @classmethod
     async def get_purchase_by_authority(cls, business_name: str, authority: str):

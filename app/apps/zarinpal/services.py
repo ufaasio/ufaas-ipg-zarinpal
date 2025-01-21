@@ -1,8 +1,9 @@
 import logging
 
-from apps.business.models import Business
+from apps.config.models import Configuration
+from fastapi_mongo_base.utils import aionetwork
 from server.config import Settings
-from utils import aionetwork
+from ufaas_fastapi_business.models import Business
 
 from .exceptions import AmountIsLessThanMinimum, PurchaseDoesNotExist, ZarinpalException
 from .models import Purchase
@@ -13,8 +14,11 @@ async def start_purchase(business: Business, purchase: Purchase) -> dict:
     callback_url = (
         f"https://{business.domain}{Settings.base_path}/purchases/{purchase.uid}/verify"
     )
+
+    config: Configuration = await Configuration.get_config(business.name)
+
     data = {
-        "MerchantID": business.secret.merchant_id,
+        "MerchantID": config.merchant_id,
         "Amount": int(purchase.amount),
         "Description": purchase.description,
         "Mobile": purchase.phone,
@@ -54,8 +58,10 @@ async def verify_purchase(
         await purchase.fail("Status is NOK")
         return purchase
 
+    config: Configuration = await Configuration.get_config(business.name)
+
     data = {
-        "MerchantID": business.secret.merchant_id,
+        "MerchantID": config.merchant_id,
         "Amount": int(purchase.amount),
         "Authority": authority,
     }
@@ -74,6 +80,8 @@ async def verify_purchase(
 
 
 async def create_proposal(purchase: Purchase, business: Business) -> dict:
+    config: Configuration = await Configuration.get_config(business.name)
+
     proposal_data = ProposalCreateSchema(
         amount=purchase.amount,
         description=purchase.description,
@@ -81,7 +89,7 @@ async def create_proposal(purchase: Purchase, business: Business) -> dict:
         task_status="init",
         participants=[
             {"wallet_id": purchase.wallet_id, "amount": purchase.amount},
-            {"wallet_id": business.config.income_wallet_id, "amount": -purchase.amount},
+            {"wallet_id": config.income_wallet_id, "amount": -purchase.amount},
         ],
         note=None,
         meta_data=None,
@@ -95,7 +103,7 @@ async def create_proposal(purchase: Purchase, business: Business) -> dict:
 
     response = await aionetwork.aio_request(
         method="post",
-        url=business.config.core_url,
+        url=f"{business.config.core_url}api/v1/proposals/",
         data=proposal_data,
         headers=headers,
         raise_exception=False,
